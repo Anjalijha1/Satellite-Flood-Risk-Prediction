@@ -4,3 +4,4 @@ scikit-learn
 streamlit
 plotly
 joblib
+matplotlib
