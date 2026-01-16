@@ -1,4 +1,4 @@
-# flood_risk_dashboard.py
+# flood_risk_dashboard_fixed.py
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -40,37 +40,63 @@ if uploaded_file:
         mime='text/csv'
     )
 
-    # --- State-wise Aggregation for Charts ---
-    state_avg = df.groupby('state')[['rainfall_mm','river_level_mm']].mean().reset_index()
-
+    # --- State-wise Average Rainfall & River Level ---
     st.subheader("State-wise Average Rainfall & River Level")
-    fig1 = px.bar(state_avg, x='state', y=['rainfall_mm','river_level_mm'],
-                  barmode='group', title="🌧️ Average Rainfall & River Level per State")
+    state_avg = df.groupby('state')[['rainfall_mm','river_level_mm']].mean().reset_index()
+    fig1 = px.bar(
+        state_avg,
+        x='state',
+        y=['rainfall_mm','river_level_mm'],
+        barmode='group',
+        title="🌧️ Average Rainfall & River Level per State"
+    )
     st.plotly_chart(fig1, use_container_width=True)
 
-    # --- State-wise Risk Distribution (Stacked Bar) ---
+    # --- State-wise Risk Distribution (Fixed) ---
     st.subheader("State-wise Flood Risk Distribution")
     state_risk = df.groupby(['state','risk']).size().unstack(fill_value=0)
-    fig2 = px.bar(state_risk, x=state_risk.index, y=['Low','Medium','High'],
-                  title="🌊 State-wise Risk Distribution", color_discrete_map={'Low':'green','Medium':'orange','High':'red'})
+
+    # Ensure all risk columns exist
+    for col in ['Low','Medium','High']:
+        if col not in state_risk.columns:
+            state_risk[col] = 0
+
+    state_risk = state_risk.reset_index()  # convert index to column for Plotly
+    fig2 = px.bar(
+        state_risk,
+        x='state',
+        y=['Low','Medium','High'],
+        title="🌊 State-wise Risk Distribution",
+        color_discrete_map={'Low':'green','Medium':'orange','High':'red'}
+    )
     st.plotly_chart(fig2, use_container_width=True)
 
-    # --- Sunburst: State → District Hierarchy for Rainfall ---
+    # --- Sunburst: State → District for Rainfall ---
     st.subheader("🌧️ Rainfall State → District Hierarchy")
     df_agg = df.groupby(['state','district']).agg({'rainfall_mm':'mean','river_level_mm':'mean'}).reset_index()
-    fig3 = px.sunburst(df_agg, path=['state','district'], values='rainfall_mm',
-                       color='rainfall_mm', color_continuous_scale='Blues',
-                       title="Rainfall Hierarchy (State → District)")
+    fig3 = px.sunburst(
+        df_agg,
+        path=['state','district'],
+        values='rainfall_mm',
+        color='rainfall_mm',
+        color_continuous_scale='Blues',
+        title="Rainfall Hierarchy (State → District)"
+    )
     st.plotly_chart(fig3, use_container_width=True)
 
-    # --- Sunburst: State → District Hierarchy for River Level ---
+    # --- Sunburst: State → District for River Level ---
     st.subheader("🌊 River Level State → District Hierarchy")
-    fig4 = px.sunburst(df_agg, path=['state','district'], values='river_level_mm',
-                       color='river_level_mm', color_continuous_scale='Oranges',
-                       title="River Level Hierarchy (State → District)")
+    fig4 = px.sunburst(
+        df_agg,
+        path=['state','district'],
+        values='river_level_mm',
+        color='river_level_mm',
+        color_continuous_scale='Oranges',
+        title="River Level Hierarchy (State → District)"
+    )
     st.plotly_chart(fig4, use_container_width=True)
 
-    # --- ML Model for Risk Prediction ---
+    # --- ML Model for Flood Risk Prediction ---
     st.subheader("⚡ Predict Flood Risk for New Data")
     X = df[['rainfall_mm','river_level_mm']]
     le = LabelEncoder()
