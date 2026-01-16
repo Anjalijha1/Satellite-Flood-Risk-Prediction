@@ -1,95 +1,133 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
-st.set_page_config(page_title="Flood Risk Detection", layout="wide")
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
 
-st.title("Satellite-based Flood Risk Detection System")
+st.set_page_config(page_title="Flood Risk Prediction", layout="wide")
+
+st.title("Flood Risk Detection & Prediction Dashboard")
 
 st.write(
-    "This dashboard analyzes rainfall, river level, and elevation data "
-    "to estimate flood risk in different regions."
+    "Upload flood-related CSV data. "
+    "The system uses Machine Learning to analyze and predict flood risk."
 )
 
-# -------------------------------
-# Sample Flood Risk Dataset
-# -------------------------------
-data = {
-    "Region": ["Assam", "Bihar", "Odisha", "Uttar Pradesh", "Maharashtra"],
-    "Rainfall (mm)": [320, 280, 260, 300, 150],
-    "River Level (m)": [6.8, 6.2, 5.5, 6.0, 3.2],
-    "Elevation (m)": [90, 85, 120, 100, 350]
-}
+# -----------------------
+# FILE UPLOAD
+# -----------------------
+uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
 
-df = pd.DataFrame(data)
+if uploaded_file is None:
+    st.warning("Please upload a CSV file to continue.")
+    st.stop()
 
-# Flood risk logic
-def classify_risk(rainfall, river):
-    if rainfall > 300 and river > 6.5:
-        return "High"
-    elif rainfall > 200 and river > 5.5:
-        return "Medium"
-    else:
-        return "Low"
+df = pd.read_csv(uploaded_file)
 
-df["Flood Risk"] = df.apply(
-    lambda x: classify_risk(x["Rainfall (mm)"], x["River Level (m)"]),
-    axis=1
-)
+required_cols = [
+    "state", "rainfall_mm", "river_level_mm", "floodrisk"
+]
 
-# -------------------------------
-# Display Table
-# -------------------------------
-st.subheader("Flood Risk Data Table")
+for col in required_cols:
+    if col not in df.columns:
+        st.error(f"Missing required column: {col}")
+        st.stop()
+
+st.subheader("Uploaded Data")
 st.dataframe(df, use_container_width=True)
 
-# -------------------------------
-# Charts Section
-# -------------------------------
-col1, col2 = st.columns(2)
+# -----------------------
+# LABEL ENCODING
+# -----------------------
+le = LabelEncoder()
+df["risk_encoded"] = le.fit_transform(df["floodrisk"])
 
-with col1:
-    st.subheader("Rainfall by Region")
-    fig1, ax1 = plt.subplots()
-    ax1.bar(df["Region"], df["Rainfall (mm)"])
-    ax1.set_ylabel("Rainfall (mm)")
-    ax1.set_xlabel("Region")
-    st.pyplot(fig1)
+X = df[["rainfall_mm", "river_level_mm"]]
+y = df["risk_encoded"]
 
-with col2:
-    st.subheader("River Level by Region")
-    fig2, ax2 = plt.subplots()
-    ax2.plot(df["Region"], df["River Level (m)"], marker="o")
-    ax2.set_ylabel("River Level (m)")
-    ax2.set_xlabel("Region")
-    st.pyplot(fig2)
+# -----------------------
+# ML MODEL
+# -----------------------
+model = RandomForestClassifier(
+    n_estimators=100,
+    random_state=42
+)
+model.fit(X, y)
 
-# -------------------------------
-# Pie Chart
-# -------------------------------
-st.subheader("Flood Risk Distribution")
+# -----------------------
+# PREDICTION
+# -----------------------
+df["predicted_encoded"] = model.predict(X)
+df["predicted_flood_risk"] = le.inverse_transform(df["predicted_encoded"])
 
-risk_counts = df["Flood Risk"].value_counts()
-fig3, ax3 = plt.subplots()
-ax3.pie(risk_counts, labels=risk_counts.index, autopct="%1.1f%%")
-st.pyplot(fig3)
-
-# -------------------------------
-# Satellite Image Section
-# -------------------------------
-st.subheader("Satellite Observation (Example)")
-
-st.image(
-    "https://upload.wikimedia.org/wikipedia/commons/6/6b/Flood_satellite_image.jpg",
-    caption="Satellite Image Showing Flooded Area",
-    use_column_width=True
+# -----------------------
+# RESULT TABLE
+# -----------------------
+st.subheader("Flood Risk Prediction Result")
+st.dataframe(
+    df[
+        [
+            "state",
+            "rainfall_mm",
+            "river_level_mm",
+            "floodrisk",
+            "predicted_flood_risk"
+        ]
+    ],
+    use_container_width=True
 )
 
-# -------------------------------
-# Conclusion
-# -------------------------------
-st.subheader("Conclusion")
+# -----------------------
+# PIE CHART
+# -----------------------
+st.subheader("Flood Risk Distribution")
+
+risk_counts = df["predicted_flood_risk"].value_counts()
+fig1, ax1 = plt.subplots()
+ax1.pie(
+    risk_counts,
+    labels=risk_counts.index,
+    autopct="%1.1f%%",
+    startangle=90
+)
+st.pyplot(fig1)
+
+# -----------------------
+# STATE FILTER
+# -----------------------
+st.subheader("State-wise Analysis")
+
+selected_state = st.selectbox(
+    "Select State",
+    df["state"].unique()
+)
+
+state_df = df[df["state"] == selected_state]
+st.dataframe(state_df, use_container_width=True)
+
+# -----------------------
+# GRAPHS
+# -----------------------
+st.subheader("Rainfall vs River Level")
+
+fig2, ax2 = plt.subplots()
+ax2.scatter(df["rainfall_mm"], df["river_level_mm"])
+ax2.set_xlabel("Rainfall (mm)")
+ax2.set_ylabel("River Level (mm)")
+st.pyplot(fig2)
+
+st.subheader("Average Rainfall by State")
+
+avg_rain = df.groupby("state")["rainfall_mm"].mean()
+
+fig3, ax3 = plt.subplots()
+avg_rain.plot(kind="bar", ax=ax3)
+ax3.set_ylabel("Rainfall (mm)")
+st.pyplot(fig3)
+
 st.write(
-    "Regions marked as **High Risk** require immediate monitoring and disaster preparedness. "
-    "This system can be extended using real satellite and rainfall APIs."
+    "Model used: Random Forest Classifier. "
+    "This can be extended using satellite imagery and temporal data."
 )
