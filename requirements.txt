@@ -1,5 +1,6 @@
 pandas
 numpy
+tabulate
 scikit-learn
 streamlit
 plotly
