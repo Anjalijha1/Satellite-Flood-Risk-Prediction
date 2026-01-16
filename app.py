@@ -1,133 +1,47 @@
-import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
 
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder
+# 1. Load the dataset
+df = pd.read_csv('weather_state_district_no_floodrisk_4000_rows.csv')
 
-st.set_page_config(page_title="Flood Risk Prediction", layout="wide")
+# 2. Prepare Data for Machine Learning (K-Means)
+# We use rainfall and river level to predict risk clusters
+features = ['rainfall_mm', 'river_level_mm']
+X = df[features]
 
-st.title("Flood Risk Detection & Prediction Dashboard")
+# Scale features for better clustering performance
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-st.write(
-    "Upload flood-related CSV data. "
-    "The system uses Machine Learning to analyze and predict flood risk."
-)
+# 3. Apply K-Means Clustering (3 clusters for Low, Moderate, High)
+kmeans = KMeans(n_clusters=3, random_state=42, n_init=10)
+df['cluster'] = kmeans.fit_predict(X_scaled)
 
-# -----------------------
-# FILE UPLOAD
-# -----------------------
-uploaded_file = st.file_uploader("Upload CSV File", type=["csv"])
+# 4. Map Clusters to Human-Readable Risk Labels
+# We rank clusters by their average rainfall/river level to assign labels correctly
+cluster_means = df.groupby('cluster')[features].mean().sum(axis=1).sort_values()
+label_map = {
+    cluster_means.index[0]: 'Low Risk',
+    cluster_means.index[1]: 'Moderate Risk',
+    cluster_means.index[2]: 'High Risk'
+}
+df['predicted_flood_risk'] = df['cluster'].map(label_map)
+df.drop(columns=['cluster'], inplace=True) # Remove helper column
 
-if uploaded_file is None:
-    st.warning("Please upload a CSV file to continue.")
-    st.stop()
+# 5. Save the updated dataset
+df.to_csv('flood_risk_predictions_final.csv', index=False)
 
-df = pd.read_csv(uploaded_file)
+# 6. Visualization: Pie Chart
+plt.figure(figsize=(8, 8))
+risk_counts = df['predicted_flood_risk'].value_counts()
+plt.pie(risk_counts, labels=risk_counts.index, autopct='%1.1f%%', 
+        colors=['#99ff99','#66b3ff','#ff9999'], startangle=140, explode=(0.05, 0.05, 0.05))
+plt.title('Total Distribution of Predicted Flood Risk')
+plt.savefig('flood_risk_pie_chart.png')
 
-required_cols = [
-    "state", "rainfall_mm", "river_level_mm", "floodrisk"
-]
-
-for col in required_cols:
-    if col not in df.columns:
-        st.error(f"Missing required column: {col}")
-        st.stop()
-
-st.subheader("Uploaded Data")
-st.dataframe(df, use_container_width=True)
-
-# -----------------------
-# LABEL ENCODING
-# -----------------------
-le = LabelEncoder()
-df["risk_encoded"] = le.fit_transform(df["floodrisk"])
-
-X = df[["rainfall_mm", "river_level_mm"]]
-y = df["risk_encoded"]
-
-# -----------------------
-# ML MODEL
-# -----------------------
-model = RandomForestClassifier(
-    n_estimators=100,
-    random_state=42
-)
-model.fit(X, y)
-
-# -----------------------
-# PREDICTION
-# -----------------------
-df["predicted_encoded"] = model.predict(X)
-df["predicted_flood_risk"] = le.inverse_transform(df["predicted_encoded"])
-
-# -----------------------
-# RESULT TABLE
-# -----------------------
-st.subheader("Flood Risk Prediction Result")
-st.dataframe(
-    df[
-        [
-            "state",
-            "rainfall_mm",
-            "river_level_mm",
-            "floodrisk",
-            "predicted_flood_risk"
-        ]
-    ],
-    use_container_width=True
-)
-
-# -----------------------
-# PIE CHART
-# -----------------------
-st.subheader("Flood Risk Distribution")
-
-risk_counts = df["predicted_flood_risk"].value_counts()
-fig1, ax1 = plt.subplots()
-ax1.pie(
-    risk_counts,
-    labels=risk_counts.index,
-    autopct="%1.1f%%",
-    startangle=90
-)
-st.pyplot(fig1)
-
-# -----------------------
-# STATE FILTER
-# -----------------------
-st.subheader("State-wise Analysis")
-
-selected_state = st.selectbox(
-    "Select State",
-    df["state"].unique()
-)
-
-state_df = df[df["state"] == selected_state]
-st.dataframe(state_df, use_container_width=True)
-
-# -----------------------
-# GRAPHS
-# -----------------------
-st.subheader("Rainfall vs River Level")
-
-fig2, ax2 = plt.subplots()
-ax2.scatter(df["rainfall_mm"], df["river_level_mm"])
-ax2.set_xlabel("Rainfall (mm)")
-ax2.set_ylabel("River Level (mm)")
-st.pyplot(fig2)
-
-st.subheader("Average Rainfall by State")
-
-avg_rain = df.groupby("state")["rainfall_mm"].mean()
-
-fig3, ax3 = plt.subplots()
-avg_rain.plot(kind="bar", ax=ax3)
-ax3.set_ylabel("Rainfall (mm)")
-st.pyplot(fig3)
-
-st.write(
-    "Model used: Random Forest Classifier. "
-    "This can be extended using satellite imagery and temporal data."
-)
+# 7. Beautiful Table Output (First 10 Rows)
+print("Updated Dataset with Prediction:")
+print(df.head(10).to_markdown())
