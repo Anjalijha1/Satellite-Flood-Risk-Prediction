@@ -1,7 +1,6 @@
-# flood_risk_dashboard_fixed.py
+# flood_risk_dashboard_dynamic.py
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.express as px
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
@@ -11,23 +10,31 @@ st.set_page_config(page_title="🌧️ Flood Risk Dashboard", layout="wide")
 st.title("🌧️ Flood Risk Prediction & Visualization Dashboard")
 
 # --- Upload CSV ---
-uploaded_file = st.file_uploader("Upload CSV with columns: state, district, latitude, longitude, date, rainfall_mm, river_level_mm")
+uploaded_file = st.file_uploader(
+    "Upload CSV with columns: state, district, latitude, longitude, date, rainfall_mm, river_level_mm"
+)
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
     st.subheader("Full Dataset Preview")
     st.dataframe(df)
 
-    # --- Calculate Risk ---
+    # --- Dynamic Percentile-based Risk Calculation ---
+    rainfall_33 = df['rainfall_mm'].quantile(0.33)
+    rainfall_66 = df['rainfall_mm'].quantile(0.66)
+    river_33 = df['river_level_mm'].quantile(0.33)
+    river_66 = df['river_level_mm'].quantile(0.66)
+
     def calculate_risk(row):
-        if row['rainfall_mm'] > 100 or row['river_level_mm'] > 500:
+        if row['rainfall_mm'] > rainfall_66 or row['river_level_mm'] > river_66:
             return "High"
-        elif row['rainfall_mm'] > 50 or row['river_level_mm'] > 250:
+        elif row['rainfall_mm'] > rainfall_33 or row['river_level_mm'] > river_33:
             return "Medium"
         else:
             return "Low"
 
     df['risk'] = df.apply(calculate_risk, axis=1)
+
     st.subheader("Dataset with Predicted Flood Risk")
     st.dataframe(df)
 
@@ -42,13 +49,14 @@ if uploaded_file:
 
     # --- State-wise Average Rainfall & River Level ---
     st.subheader("State-wise Average Rainfall & River Level")
-    state_avg = df.groupby('state')[['rainfall_mm','river_level_mm']].mean().reset_index()
+    state_avg = df.groupby('state')[['rainfall_mm', 'river_level_mm']].mean().reset_index()
     fig1 = px.bar(
         state_avg,
         x='state',
-        y=['rainfall_mm','river_level_mm'],
+        y=['rainfall_mm', 'river_level_mm'],
         barmode='group',
-        title="🌧️ Average Rainfall & River Level per State"
+        title="🌧️ Average Rainfall & River Level per State",
+        labels={'value':'mm','state':'State','variable':'Metric'}
     )
     st.plotly_chart(fig1, use_container_width=True)
 
@@ -61,7 +69,7 @@ if uploaded_file:
         if col not in state_risk.columns:
             state_risk[col] = 0
 
-    state_risk = state_risk.reset_index()  # convert index to column for Plotly
+    state_risk = state_risk.reset_index()  # convert index to column
     fig2 = px.bar(
         state_risk,
         x='state',
